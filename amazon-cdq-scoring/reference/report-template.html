@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CDQ v3 诊断报告 — {{ASIN}}</title>
+<style>
+:root {
+  --bg: #f8f9fa;
+  --card: #ffffff;
+  --border: #dee2e6;
+  --text: #212529;
+  --text-secondary: #6c757d;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --red: #dc2626;
+  --red-bg: #fef2f2;
+  --orange: #d97706;
+  --orange-bg: #fffbeb;
+  --green: #16a34a;
+  --green-bg: #f0fdf4;
+  --blue-bg: #eff6ff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+.container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+
+.header { background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); color: #fff; border-radius: 12px; padding: 32px; margin-bottom: 24px; }
+.header h1 { font-size: 1.5rem; margin-bottom: 4px; }
+.header .meta { font-size: 0.85rem; opacity: 0.85; }
+
+.score-card { background: var(--card); border-radius: 12px; padding: 32px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; border: 1px solid var(--border); }
+.score-big { font-size: 3.5rem; font-weight: 700; }
+.score-total { font-size: 1.2rem; color: var(--text-secondary); margin-bottom: 8px; }
+.grade-badge { display: inline-block; padding: 4px 20px; border-radius: 20px; font-size: 1.1rem; font-weight: 600; }
+.grade-C { background: var(--orange-bg); color: var(--orange); }
+.grade-B { background: var(--blue-bg); color: var(--accent); }
+.grade-A { background: var(--green-bg); color: var(--green); }
+.grade-D { background: var(--red-bg); color: var(--red); }
+.grade-U { background: var(--red-bg); color: var(--red); }
+
+.card { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid var(--border); }
+.card h2 { font-size: 1.15rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); color: var(--accent); }
+.card h3 { font-size: 1rem; margin: 16px 0 8px; color: var(--text); }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: var(--blue-bg); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+tr:hover { background: #f8fafc; }
+
+.pass { color: var(--green); font-weight: 600; }
+.warn { color: var(--orange); font-weight: 600; }
+.fail { color: var(--red); font-weight: 600; }
+
+.tag-red { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: var(--red-bg); color: var(--red); font-weight: 600; }
+.tag-orange { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: var(--orange-bg); color: var(--orange); font-weight: 600; }
+.tag-green { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: var(--green-bg); color: var(--green); font-weight: 600; }
+
+.quote { background: #f1f5f9; border-left: 4px solid var(--accent); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 12px 0; font-size: 0.88rem; }
+.quote-title { font-size: 0.9rem; color: var(--text-secondary); }
+
+.alert-red { background: var(--red-bg); border: 1px solid #fecaca; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
+.alert-red h4 { color: var(--red); font-size: 0.9rem; margin-bottom: 4px; }
+.alert-orange { background: var(--orange-bg); border: 1px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
+.alert-orange h4 { color: var(--orange); font-size: 0.9rem; margin-bottom: 4px; }
+.alert-green { background: var(--green-bg); border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
+.alert-green h4 { color: var(--green); font-size: 0.9rem; margin-bottom: 4px; }
+
+.stage-table th { background: #f0fdf4; }
+.stage-highlight { font-weight: 700; color: var(--green); }
+
+.footer { text-align: center; font-size: 0.78rem; color: var(--text-secondary); margin-top: 32px; padding: 16px; border-top: 1px solid var(--border); }
+.revision { background: var(--green-bg); border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 16px; margin-top: 8px; font-size: 0.82rem; color: #15803d; }
+
+@media (max-width: 640px) {
+  .container { padding: 12px 8px; }
+  .header { padding: 20px; }
+  .card { padding: 16px; }
+  table { font-size: 0.8rem; }
+  th, td { padding: 6px 6px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Section 1: Header -->
+<div class="header">
+  <h1>CDQ v3 诊断报告</h1>
+  <div class="meta">诊断时间：{{DATE}} | 数据来源：{{DATA_SOURCE}}</div>
+</div>
+
+<!-- Section 2: Basic Info -->
+<div class="card">
+  <h2>基本信息</h2>
+  <table>
+    {{BASIC_INFO_ROWS}}
+  </table>
+  {{BASIC_INFO_NOTE}}
+</div>
+
+<!-- Section 3: Score Card -->
+<div class="score-card">
+  <div class="score-total">总分</div>
+  <div class="score-big grade-{{GRADE_LEVEL}}">{{TOTAL_SCORE}} / 120</div>
+  <div class="grade-badge grade-{{GRADE_LEVEL}}">等级：{{GRADE_LEVEL}}（{{GRADE_DESC}}）</div>
+</div>
+
+<!-- Section 4: Dimension Scores -->
+<div class="card">
+  <h2>各维度得分</h2>
+  <table>
+    <thead>
+      <tr><th>维度</th><th>权重</th><th>得分</th><th>等级</th></tr>
+    </thead>
+    <tbody>
+      {{DIMENSION_SCORE_ROWS}}
+    </tbody>
+  </table>
+</div>
+
+<!-- Section 5: Policy Violation Detection -->
+<div class="card">
+  <h2>政策违规检测（U 级风险扫描）</h2>
+  <table>
+    <thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      {{POLICY_CHECK_ROWS}}
+    </tbody>
+  </table>
+  {{POLICY_CONCLUSION}}
+</div>
+
+<!-- Section 6: Dimension 1 - Structured Attributes -->
+<div class="card">
+  <h2>维度 1：结构化属性质量（{{DIM1_SCORE}}/30）</h2>
+
+  <h3>RAI 核心属性</h3>
+  <table>
+    <thead><tr><th>#</th><th>属性</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      {{RAI_ROWS}}
+    </tbody>
+  </table>
+
+  <h3>Band A 属性（转化动力）</h3>
+  <table>
+    <thead><tr><th>属性</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      {{BAND_A_ROWS}}
+    </tbody>
+  </table>
+
+  <h3>Band B 属性（体验增强）</h3>
+  <table>
+    <thead><tr><th>属性</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      {{BAND_B_ROWS}}
+    </tbody>
+  </table>
+
+  <div class="quote">
+    <span class="quote-title">Search Terms</span><br>
+    ⚠️ Catalog API 不返回 Search Terms 字段，请至卖家后台确认是否已填写完整。
+  </div>
+</div>
+
+<!-- Section 7: Dimension 2 - Title Quality -->
+<div class="card">
+  <h2>维度 2：标题质量（{{DIM2_SCORE}}/25）</h2>
+
+  <div class="quote">
+    <span class="quote-title">当前标题</span><br>
+    {{CURRENT_TITLE}}
+  </div>
+
+  <h3>TQS 逐项评分</h3>
+  <table>
+    <thead><tr><th>检查项</th><th>标准</th><th>实际</th><th>评级</th></tr></thead>
+    <tbody>
+      {{TQS_ROWS}}
+    </tbody>
+  </table>
+
+  {{TITLE_SUGGESTION}}
+</div>
+
+<!-- Section 8: Dimension 3 - Variation Quality -->
+<div class="card">
+  <h2>维度 3：变体质量（{{DIM3_SCORE}}/20）</h2>
+  <table>
+    <thead><tr><th>项目</th><th>值</th><th>状态</th></tr></thead>
+    <tbody>
+      {{VARIATION_ROWS}}
+    </tbody>
+  </table>
+  {{VARIATION_ANALYSIS}}
+</div>
+
+<!-- Section 9: Dimension 4 - Product Type Classification -->
+<div class="card">
+  <h2>维度 4：产品类型分类（{{DIM4_SCORE}}/20）</h2>
+  <table>
+    <thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      {{PT_CLASSIFICATION_ROWS}}
+    </tbody>
+  </table>
+</div>
+
+<!-- Section 10: Dimension 5 - Image Quality -->
+<div class="card">
+  <h2>维度 5：图片质量（{{DIM5_SCORE}}/15）</h2>
+  <table>
+    <thead><tr><th>图片</th><th>类型</th><th>分析结果</th><th>状态</th></tr></thead>
+    <tbody>
+      {{IMAGE_ROWS}}
+    </tbody>
+  </table>
+  {{IMAGE_ALERT}}
+</div>
+
+<!-- Section 11: Dimension 6 - Bullet Points -->
+<div class="card">
+  <h2>维度 6：五点描述（{{DIM6_SCORE}}/5）</h2>
+
+  {{BP_DATA_SOURCE_NOTE}}
+
+  {{BP_QUOTES}}
+
+  <h3>评分分析</h3>
+  <table>
+    <thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      {{BP_ANALYSIS_ROWS}}
+    </tbody>
+  </table>
+
+  {{BP_SUGGESTION}}
+</div>
+
+<!-- Section 12: Dimension 7 - A+ Content -->
+<div class="card">
+  <h2>维度 7：A+ 页面（{{DIM7_SCORE}}/5）</h2>
+
+  {{APLUS_DETECTION_NOTE}}
+
+  <table>
+    <thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      {{APLUS_ROWS}}
+    </tbody>
+  </table>
+
+  {{APLUS_DETAIL}}
+</div>
+
+<!-- Section 13: High Frequency Words -->
+<div class="card">
+  <h2>高频词检查</h2>
+  <table>
+    <thead><tr><th>关键词</th><th>标题</th><th>BP</th><th>图片标签</th><th>总频次</th><th>评估</th></tr></thead>
+    <tbody>
+      {{KEYWORD_ROWS}}
+    </tbody>
+  </table>
+  {{KEYWORD_SUMMARY}}
+</div>
+
+<!-- Section 14: Overall Compliance -->
+<div class="card">
+  <h2>整体合规性</h2>
+  <table>
+    <thead><tr><th>合规项</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      {{COMPLIANCE_ROWS}}
+    </tbody>
+  </table>
+</div>
+
+<!-- Section 15: Defect List -->
+<div class="card">
+  <h2>缺陷清单</h2>
+  <table>
+    <thead><tr><th>优先级</th><th>维度</th><th>缺陷类型</th><th>当前状态</th><th>修复建议</th><th>预期加分</th></tr></thead>
+    <tbody>
+      {{DEFECT_ROWS}}
+    </tbody>
+  </table>
+</div>
+
+<!-- Section 16: Optimization Priority -->
+<div class="card">
+  <h2>优化优先级建议</h2>
+
+  <h3><span class="tag-red">第一阶段：严重缺陷修复（预计 +{{PHASE1_POINTS}} 分）</span></h3>
+  <ol style="padding-left:20px; font-size:0.9rem; margin-bottom:16px;">
+    {{PHASE1_ITEMS}}
+  </ol>
+
+  <h3><span class="tag-orange">第二阶段：中等缺陷修复（预计 +{{PHASE2_POINTS}} 分）</span></h3>
+  <ol start="{{PHASE2_START}}" style="padding-left:20px; font-size:0.9rem; margin-bottom:16px;">
+    {{PHASE2_ITEMS}}
+  </ol>
+
+  <h3><span class="tag-green">第三阶段：提升优化（预计 +{{PHASE3_POINTS}} 分）</span></h3>
+  <ol start="{{PHASE3_START}}" style="padding-left:20px; font-size:0.9rem;">
+    {{PHASE3_ITEMS}}
+  </ol>
+</div>
+
+<!-- Section 17: Expected Improvement -->
+<div class="card">
+  <h2>预期优化效果（分阶段）</h2>
+  <table class="stage-table">
+    <thead><tr><th>阶段</th><th>修复内容</th><th>预计分数</th><th>等级变化</th></tr></thead>
+    <tbody>
+      {{STAGE_ROWS}}
+    </tbody>
+  </table>
+</div>
+
+<!-- Appendix: Business Performance -->
+<div class="card">
+  <h2>附录：商业表现参考（不直接影响评分）</h2>
+  <table>
+    <thead><tr><th>指标</th><th>数据</th></tr></thead>
+    <tbody>
+      {{BUSINESS_ROWS}}
+    </tbody>
+  </table>
+  {{BUSINESS_SUMMARY}}
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  本报告由 CDQ v3 诊断 Skill 生成<br>
+  数据来源：{{FOOTER_DATA_SOURCE}} | GPSR 合规评估已排除
+  {{FOOTER_REVISION}}
+</div>
+
+</div>
+</body>
+</html>

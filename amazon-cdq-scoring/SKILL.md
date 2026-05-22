@@ -10,7 +10,7 @@ model: sonnet
 color: blue
 field: ecommerce
 expertise: expert
-version: 1.3.0
+version: 1.5.0
 author: DianDian IoT
 tags: [amazon, cdq, listing-quality, catalog-quality, ecommerce, asin, optimization]
 parameters:
@@ -199,6 +199,12 @@ parameters:
 
 ### 维度 5：五点描述 (Bullet Points / Descriptive Summary Quality) — 5%
 
+> **⚠️ 强制规则（v1.5.0 强化）：**
+> 评分前**必须**先通过前台 web_reader 抓取确认 BP 数量和内容。
+> 后台 Catalog API 返回的 BP 数量可能不完整（已知 bug：可能仅返回 1 条而实际有 5 条）。
+> **严禁仅凭后台数据判定 BP 数量不足。**
+> 若前台抓取失败，需在报告中明确注明"无法确认前台 BP 数量，以下评分基于后台数据（可能不完整）"，而非直接按后台数据评分。
+
 **评分规则：**
 - ≥ 3 条 Bullet Points → 100%
 - ≥ 1 条 Bullet Points → 50%
@@ -268,12 +274,47 @@ parameters:
 - 属性值与图片/描述冲突会降低 Listing 信任分
 - 标签和文件名是亚马逊系统收录关键词的重要途径
 
+## JSON→Excel 字段解析功能（v1.5.0 新增）
+
+当用户提供 JSON 后台数据文件时，在 CDQ 诊断之前，先输出一份 Excel 字段解析表。
+
+### 功能说明
+- 读取 JSON 文件，展平嵌套结构（如 `sales_rank.main`、`images.primary`）
+- 使用 `reference/field-mapping.json` 映射表将字段名和枚举值翻译为中文
+- 输出 Excel 文件，格式如下：
+
+| 字段 | 值 |
+|------|-----|
+| asin（ASIN 编号） | B0BGXT52DG |
+| material（材质） | Carbon Steel（碳钢） |
+| title（标题） | 4x4 Post Base 4 Pcs... |
+
+### 格式规则
+- **两列**：字段 | 值
+- **字段名格式**：`field_name（中文名）`，未知字段保留原文不翻译
+- **值格式**：
+  - 枚举值类：`Original Value（中文翻译）`
+  - 自由文本类（标题、BP、描述）：保留原文不翻译
+  - 数值/布尔类：保留原文
+  - 数组类（BP）：每条分行显示
+- **嵌套字段**：展平为 `parent.child` 格式，如 `sales_rank.main`（主类目 BSR 排名）
+- **输出文件**：`{ASIN}_字段解析.xlsx`，保存到用户桌面
+
+### 映射表维护
+- 映射表位于 `reference/field-mapping.json`，包含约 100 个常见 Amazon Catalog API 字段
+- 遇到未知字段时保留英文原文，不翻译
+- 用户可反馈补充缺失字段
+
 ## 诊断工作流
 
 ### 阶段 1：数据收集
-1. 确认用户提供的数据类型（ASIN / Listing 文本 / 质量报告 / 截图）
+1. 确认用户提供的数据类型（ASIN / Listing 文本 / 后台数据文件 / 截图）
 2. 如果是 ASIN，请用户提供：标题、五点描述、图片数量、后台属性截图或列表、变体信息、类目节点
-3. 如果是质量报告，读取并解析报告内容
+3. 如果是后台数据文件（JSON / CSV / Excel / TXT），先执行 JSON→Excel 字段解析（见下方），再进行 CDQ 诊断
+4. **BP 前台验证（强制步骤，v1.5.0 新增）：**
+   - 使用 web_reader 抓取前台页面，提取实际展示的 BP 数量和内容
+   - 与后台数据对比，以前台数据为准进行评分
+   - 若前台抓取失败，在报告中注明"无法确认前台 BP 数量"并使用后台数据（标注"可能不完整"）
 
 ### 阶段 2：逐维度评分
 按以下顺序评估每个维度：
@@ -410,6 +451,23 @@ parameters:
 7. **GPSR 合规评估已排除（v1.1.0）** — 暂不评估欧盟 GPSR (General Product Safety Regulation) 合规性。安全信息、制造商信息、EU 负责人信息的完整性仅作为数据完整性问题评估，不影响合规评分。如需恢复此评估，请切换回 v1.0.0
 
 ## 版本修改记录
+
+### v1.5.0 (2026-05-22)
+**新增：**
+- JSON→Excel 字段解析功能：用户提供 JSON 后台数据时，先输出字段解析 Excel 表（原文+中文翻译），再进行 CDQ 诊断
+- 字段映射表 `reference/field-mapping.json`：约 100 个 Amazon Catalog API 常见字段的 EN→CN 映射，含枚举值翻译
+- 固定 HTML 报告模板 `reference/report-template.html`：CSS + 骨架完全固定，变量片段格式规范，确保不同电脑输出一致
+- 诊断工作流阶段 1 增加「BP 前台验证」强制步骤
+
+**变更：**
+- 维度 5（五点描述）BP 前台优先规则强化：在评分规则顶部增加加粗强制框，严禁仅凭后台数据判定 BP 不足
+- 输入文件格式支持：JSON / CSV / Excel / TXT（自动识别格式）
+- 后台数据文件参数说明更新
+
+**背景：**
+- 用户反馈 HTML 报告在不同电脑上输出不一致，需固定模板
+- BP 后台 bug（仅返回 1 条而实际有 5 条）在其他电脑上仍被错误采纳，需强化规则
+- 用户需要将 JSON 后台数据解析为可读的 Excel 表格
 
 ### v1.4.0 (2026-05-20)
 **新增：**

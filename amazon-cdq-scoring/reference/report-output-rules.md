@@ -38,8 +38,10 @@
 
 ## 二、数据来源规则
 
-### 2.1 前台优先
-- **五点描述 (BP) 数量以前台抓取数据为准**，后台 API 仅返回部分 BP 是已知 bug
+### 2.1 前台优先（⚠️ 强制规则）
+- **五点描述 (BP) 数量必须通过前台 web_reader 抓取确认**，严禁仅凭后台 API 数据评分
+- 后台 API 仅返回部分 BP 是已知 bug（可能仅返回 1 条而实际有 5 条）
+- **评分前必须先执行前台抓取**，若前台抓取失败，报告中必须注明"无法确认前台 BP 数量，评分基于后台数据（可能不完整）"
 - 前台已验证存在的内容，状态标记为 ✅，不因后台数据不全而标 ⚠️
 - 后台 API 数据不全不作为 Listing 缺陷扣分
 
@@ -82,21 +84,60 @@
 
 ## 五、HTML 报告样式
 
-### 5.1 整体风格
+### 5.1 固定模板（v1.5.0 新增）
+- **必须使用** `reference/report-template.html` 作为 HTML 报告的固定模板
+- 模板包含完整的 CSS 样式和 HTML 骨架（17 个 section 容器 + footer）
+- **不允许修改模板中的 CSS 样式和布局结构**
+- 只需将 `{{PLACEHOLDER}}` 占位符替换为实际数据内容
+
+### 5.2 变量片段格式规范
+以下内容类型动态生成，但必须遵循固定 HTML 格式：
+
+**基本信息行：**
+```html
+<tr><th style="width:140px;">字段名</th><td>值</td></tr>
+```
+
+**状态标记：**
+```html
+<span class="pass">✅</span>  <!-- 通过 -->
+<span class="warn">⚠️</span>  <!-- 警告 -->
+<span class="fail">❌</span>  <!-- 失败 -->
+```
+
+**优先级标签：**
+```html
+<span class="tag-red">🔴 严重</span>
+<span class="tag-orange">🟡 中等</span>
+<span class="tag-green">🟢 低</span>
+```
+
+**提示框：**
+```html
+<div class="alert-red"><h4>标题</h4><p>内容</p></div>
+<div class="alert-orange"><h4>标题</h4><p>内容</p></div>
+<div class="alert-green"><h4>标题</h4><p>内容</p></div>
+```
+
+**引用块：**
+```html
+<div class="quote"><span class="quote-title">标签</span><br>内容</div>
+```
+
+**缺陷行：**
+```html
+<tr><td><span class="tag-red">🔴 严重</span></td><td>维度</td><td>缺陷类型</td><td>当前状态</td><td>修复建议</td><td>加分</td></tr>
+```
+
+**优化阶段列表项：**
+```html
+<li><strong>关键项</strong> — 说明</li>
+```
+
+### 5.3 整体风格
 - 单页 HTML，内联 CSS，不依赖外部资源
 - 响应式布局，移动端适配
 - 配色：蓝白为主，绿/橙/红用于状态标记
-
-### 5.2 核心组件
-- **Header**：深蓝渐变背景，报告标题 + 诊断时间 + 数据来源
-- **Score Card**：居中大字显示总分和等级
-- **Card**：每个维度/章节一个卡片，圆角 + 轻阴影
-- **表格**：蓝灰表头，hover 高亮行
-- **Alert**：红/橙/绿三种级别的提示框
-- **Footer**：数据来源说明
-
-### 5.3 参考实现
-以 `CDQ_v3_Report_B0BWY7ZDT2.html` 为标准模板，后续报告保持一致的 CSS 变量和组件结构。
 
 ---
 
