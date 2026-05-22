@@ -10,7 +10,7 @@ model: sonnet
 color: blue
 field: ecommerce
 expertise: expert
-version: 1.5.0
+version: 1.6.0
 author: DianDian IoT
 tags: [amazon, cdq, listing-quality, catalog-quality, ecommerce, asin, optimization]
 parameters:
@@ -199,10 +199,11 @@ parameters:
 
 ### 维度 5：五点描述 (Bullet Points / Descriptive Summary Quality) — 5%
 
-> **⚠️ 强制规则（v1.5.0 强化）：**
-> 评分前**必须**先通过前台 web_reader 抓取确认 BP 数量和内容。
+> **⚠️ 强制规则（v1.5.0 强化，v1.6.0 补充）：**
+> 评分前**必须**先通过前台抓取确认 BP 数量和内容。
 > 后台 Catalog API 返回的 BP 数量可能不完整（已知 bug：可能仅返回 1 条而实际有 5 条）。
 > **严禁仅凭后台数据判定 BP 数量不足。**
+> 前台抓取优先级：web_reader → agent-browser 兜底 → 降级标注
 > 若前台抓取失败，需在报告中明确注明"无法确认前台 BP 数量，以下评分基于后台数据（可能不完整）"，而非直接按后台数据评分。
 
 **评分规则：**
@@ -228,13 +229,13 @@ parameters:
 - 有高级 A+ → 额外 +10%
 - 无 A+ 内容 → 0%
 
-**A+ 内容检测方法（v1.4.0 新增）：**
+**A+ 内容检测方法（v1.4.0 新增，v1.6.0 补充）：**
 - 不能仅依赖后台 API 数据判断 A+ 是否存在（后台 `a_plus_content` 字段不可靠）
-- 必须通过前台 web_reader 抓取检测以下特征：
+- 必须通过前台抓取检测以下特征，优先使用 web_reader，失败时使用 agent-browser 兜底：
   1. **"Product description" 模块** — 前台存在结构化产品描述区域，含多个子标题/板块（如产品特性、安装说明、配件清单等），即表示有 A+ 内容
   2. **"From the brand" 模块** — 前台存在品牌介绍模块，含图片或视频，即表示有 A+ 内容
   3. 以上任一模块存在即判定 A+ 内容存在，评 100%（5 分）
-- 若前台抓取失败且后台数据无 A+ 标记，则标注"数据不足，无法确认"
+- 若前台抓取（含 agent-browser 兜底）均失败且后台数据无 A+ 标记，则标注"数据不足，无法确认"
 
 ### 维度 7：产品类型分类 (Product Type Classification) — 20%
 
@@ -311,10 +312,31 @@ parameters:
 1. 确认用户提供的数据类型（ASIN / Listing 文本 / 后台数据文件 / 截图）
 2. 如果是 ASIN，请用户提供：标题、五点描述、图片数量、后台属性截图或列表、变体信息、类目节点
 3. 如果是后台数据文件（JSON / CSV / Excel / TXT），先执行 JSON→Excel 字段解析（见下方），再进行 CDQ 诊断
-4. **BP 前台验证（强制步骤，v1.5.0 新增）：**
-   - 使用 web_reader 抓取前台页面，提取实际展示的 BP 数量和内容
-   - 与后台数据对比，以前台数据为准进行评分
-   - 若前台抓取失败，在报告中注明"无法确认前台 BP 数量"并使用后台数据（标注"可能不完整"）
+4. **前台数据验证（强制步骤，v1.6.0 增强）：**
+
+   **Step A — web_reader 抓取（首选）：**
+   - 使用 `mcp__web_reader__webReader` 抓取前台页面
+   - 提取 BP 数量和内容、A+ 模块标识、前台标题、变体列表
+   - 若成功，以前台数据为准进行评分
+
+   **Step B — agent-browser 兜底（v1.6.0 新增）：**
+   - 当 web_reader 失败时（反爬拦截、空内容、超时），自动启用 agent-browser：
+     ```
+     agent-browser open {前台URL}
+     agent-browser wait --load networkidle
+     agent-browser snapshot        # 提取 BP 文本、A+ 模块、变体选项
+     agent-browser screenshot {ASIN}_frontpage.png  # 保存截图供参考
+     agent-browser close
+     ```
+   - 从 snapshot 输出中解析：
+     - BP 数量：统计页面中要点/feature 条目
+     - A+ 内容：检测 "Product description" 和 "From the brand" 模块
+     - 前台标题：与后台数据对比
+   - 若 agent-browser 抓取成功，用抓取数据评分，报告中标注"数据来源：agent-browser"
+
+   **Step C — 降级处理：**
+   - 若 web_reader 和 agent-browser 均失败，标注"数据不足"
+   - 基于后台数据保守评分，注明"可能不完整"
 
 ### 阶段 2：逐维度评分
 按以下顺序评估每个维度：
@@ -395,22 +417,42 @@ parameters:
 ### 场景 4：竞品对标
 用户同时提供自己 ASIN 和竞品 ASIN 的数据，对比 CDQ 得分差异，找出优化空间。
 
-## MCP 工具依赖
+## 数据获取工具依赖（v1.6.0 重构）
 
-本 Skill 依赖以下 MCP 工具来获取前台数据。迁移 Skill 时需确保这些工具已安装并配置。
+本 Skill 依赖多种工具获取前台数据，按优先级形成三级获取链路。迁移 Skill 时需确保工具已安装并配置。
 
 ### 依赖工具列表
 
-| MCP 工具 | 用途 | 必需性 |
-|----------|------|--------|
-| `mcp__web_reader__webReader` | 抓取亚马逊前台页面文本内容（标题、BP、A+ 文本模块、安全信息、评论摘要等） | 推荐 |
-| `mcp__4_5v_mcp__analyze_image` | 分析产品图片内容（A+ 图片模块、主图质量评估、包装内容识别等） | 推荐 |
+| 工具 | 类型 | 用途 | 必需性 |
+|------|------|------|--------|
+| `mcp__web_reader__webReader` | MCP 工具 | 抓取亚马逊前台页面文本内容（标题、BP、A+ 文本模块、安全信息、评论摘要等） | 推荐 |
+| `mcp__4_5v_mcp__analyze_image` | MCP 工具 | 分析产品图片内容（A+ 图片模块、主图质量评估、包装内容识别等） | 推荐 |
+| `agent-browser` | CLI 工具 | 当 web_reader 被反爬拦截时，使用真实 Chrome 浏览器兜底抓取前台页面 | 推荐 |
+
+### 前台数据获取链路（v1.6.0 新增）
+
+```
+web_reader（快速，MCP 工具）
+    ↓ 成功 → 用前台数据评分
+    ↓ 失败（反爬拦截 / 空内容 / 超时）
+agent-browser（真实 Chrome，CLI 工具）
+    ↓ 成功 → 用抓取数据评分，标注"数据来源：agent-browser"
+    ↓ 失败（未安装 / 命令报错 / 网络异常）
+降级：仅用后台数据 + 标注"数据不足"
+```
 
 ### 工具能力边界
 
 **web_reader（文本抓取）：**
 - 能获取：标题、Bullet Points、Product Description 文本、A+ 文本类模块、安全信息区块、制造商信息、评论数据、变体列表
 - 不能获取：A+ 纯图片模块的内容（约 50% 的 A+ 模块为纯图片，文本爬取无法提取）、图片质量评估、图片中的文字信息
+- 常见失败：亚马逊反爬机制拦截，返回验证页面或空内容
+
+**agent-browser（浏览器兜底）：**
+- 能获取：前台页面完整 accessibility tree 快照（含 BP 文本、A+ 模块标识、变体选项）、页面截图、前台标题、评论摘要
+- 额外能力：截图保存供图片质量参考；可滚动页面获取动态加载内容
+- 不能获取：图片质量精确评估（像素占比、白底检测）、图片 alt 文本批量提取
+- 局限性：需要预安装（`npm i -g agent-browser && agent-browser install`）；首次打开页面较 web_reader 慢
 
 **analyze_image（图片分析）：**
 - 能获取：A+ 图片模块中的产品信息（规格参数、卖点、使用场景）、主图质量评估、包装内容识别
@@ -418,23 +460,30 @@ parameters:
 
 ### 降级策略
 
-当 MCP 工具不可用时，按以下策略降级：
+当工具不可用或抓取失败时，按以下策略降级：
 
 | 场景 | 降级方案 |
 |------|----------|
-| web_reader 不可用 | 要求用户手动提供前台页面截图或文本数据；A+ 分析仅依赖图片分析工具 |
-| analyze_image 不可用 | A+ 评分仅基于 web_reader 抓取的文本模块，在报告中标注"A+ 内容可能不完整（图片模块未分析）" |
-| 两者均不可用 | 仅基于用户提供的后台数据进行分析；前台相关维度（BP 前台展示数、A+ 完整性、安全信息）标记为"数据不足，无法评估" |
-| 前台页面被拦截/反爬 | 提示用户手动保存前台页面 HTML 或截图，通过文件读取方式获取数据 |
+| web_reader 被反爬拦截 | 自动启用 agent-browser 兜底抓取（v1.6.0 新增） |
+| agent-browser 不可用（未安装） | 要求用户手动提供前台页面截图或文本数据；A+ 分析仅依赖 analyze_image 工具 |
+| web_reader + agent-browser 均失败 | 仅基于后台数据进行分析；前台相关维度（BP 前台展示数、A+ 完整性、安全信息）标记为"数据不足，无法评估" |
+| analyze_image 不可用 | A+ 评分仅基于文本抓取，在报告中标注"A+ 内容可能不完整（图片模块未分析）" |
+| 所有工具均不可用 | 仅基于用户提供的后台数据进行分析，前台维度全部标记为"数据不足" |
 
 ### 安装指引
 
-迁移 Skill 至新环境时，需安装以下 MCP Server：
+迁移 Skill 至新环境时，需安装以下工具：
 
+**MCP Server（优先安装）：**
 1. **web_reader**: 在 Claude Code 的 MCP 配置中添加 web_reader server
 2. **analyze_image (4_5v_mcp)**: 在 Claude Code 的 MCP 配置中添加 4_5v_mcp server
 
-若未安装，Skill 仍可运行，但部分维度（A+ 完整性、前台 BP、图片质量）的评估精度将降低。
+**CLI 工具（兜底方案）：**
+3. **agent-browser**: `npm i -g agent-browser && agent-browser install`
+   - 安装后需运行 `agent-browser skills get core` 加载工作流内容
+   - 允许的工具：`Bash(agent-browser:*)`, `Bash(npx agent-browser:*)`
+
+若未安装任何前台获取工具，Skill 仍可运行，但部分维度（A+ 完整性、前台 BP、图片质量）的评估精度将降低。
 
 ## 报告输出规范
 
@@ -451,6 +500,25 @@ parameters:
 7. **GPSR 合规评估已排除（v1.1.0）** — 暂不评估欧盟 GPSR (General Product Safety Regulation) 合规性。安全信息、制造商信息、EU 负责人信息的完整性仅作为数据完整性问题评估，不影响合规评分。如需恢复此评估，请切换回 v1.0.0
 
 ## 版本修改记录
+
+### v1.6.0 (2026-05-22)
+**新增：**
+- 前台数据获取三级链路：web_reader → agent-browser 兜底 → 降级标注
+- agent-browser CLI 工具集成：当 web_reader 被反爬拦截时，自动启用真实 Chrome 浏览器抓取前台页面
+- 诊断工作流阶段 1 重构：从单一 web_reader 验证改为 Step A/B/C 三步走
+- 数据获取工具依赖章节重构：从"MCP 工具依赖"改为"数据获取工具依赖"，新增 agent-browser 工具能力边界说明
+- 降级策略更新：web_reader 失败后先尝试 agent-browser，再走完全降级
+- 安装指引新增 agent-browser 安装步骤
+
+**变更：**
+- 维度 5（五点描述）强制规则更新：前台抓取优先级增加 agent-browser 兜底
+- 维度 6（A+ 页面）检测方法更新：前台抓取失败场景增加 agent-browser 兜底
+- 降级策略从 4 个场景扩展为 5 个场景，新增"web_reader 被反爬拦截 → agent-browser 兜底"
+
+**背景：**
+- 实际诊断中频繁遇到亚马逊反爬拦截，web_reader 返回验证页面而非商品内容
+- agent-browser 使用真实 Chrome 浏览器（CDP 协议），可有效绕过反爬机制
+- B0GWD4P68S 诊断案例中因前台抓取失败导致 BP 数量和 A+ 内容无法确认
 
 ### v1.5.0 (2026-05-22)
 **新增：**
