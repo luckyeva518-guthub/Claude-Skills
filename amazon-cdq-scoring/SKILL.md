@@ -275,23 +275,50 @@ parameters:
 - 属性值与图片/描述冲突会降低 Listing 信任分
 - 标签和文件名是亚马逊系统收录关键词的重要途径
 
-## JSON→Excel 字段解析功能（v1.5.0 新增）
+## JSON→Excel 字段解析功能（v1.5.0 新增，v1.7.0 增强）
 
 当用户提供 JSON 后台数据文件时，在 CDQ 诊断之前，先输出一份 Excel 字段解析表。
+
+### 模板脚本
+
+通用模板脚本位于 `reference/excel-template.py`，支持：
+- 从 Catalog API JSON 自动提取后台字段
+- 接收前台验证数据（由 AI 从 web_reader 结果中提取）
+- 三段式输出：后台 API 数据 → 前台验证数据 → 缺失/未确认字段
+- 彩色区分：绿色（API）、蓝色（前台验证）、橙色（缺失警告）
+
+**调用方式（在诊断流程中由 AI 执行）：**
+
+```python
+from excel-template import generate_excel
+
+# 后台数据已解析为 dict
+generate_excel(
+    asin="B0XXXXXX",
+    backend_data=json_data,
+    frontend_rows=[
+        ("attributes.material（材质）", "ABS Plastic（ABS 塑料）", "前台验证"),
+        ("attributes.item_dimensions（产品尺寸）", '8.26"L x 5.9"W', "前台验证"),
+        # ... 更多前台提取的属性
+    ],
+    missing_rows=[
+        ("attributes.item_weight（产品重量）", "⚠️ 前台未显示，后台未返回", "—"),
+    ]
+)
+```
 
 ### 功能说明
 - 读取 JSON 文件，展平嵌套结构（如 `sales_rank.main`、`images.primary`）
 - 使用 `reference/field-mapping.json` 映射表将字段名和枚举值翻译为中文
 - 输出 Excel 文件，格式如下：
 
-| 字段 | 值 |
-|------|-----|
-| asin（ASIN 编号） | B0BGXT52DG |
-| material（材质） | Carbon Steel（碳钢） |
-| title（标题） | 4x4 Post Base 4 Pcs... |
+| 字段 | 值 | 数据来源 |
+|------|-----|---------|
+| asin（ASIN 编号） | B0BGXT52DG | 后台API |
+| material（材质） | Carbon Steel（碳钢） | 前台验证 |
 
 ### 格式规则
-- **两列**：字段 | 值
+- **三列**：字段 | 值 | 数据来源（v1.7.0 新增第三列）
 - **字段名格式**：`field_name（中文名）`，未知字段保留原文不翻译
 - **值格式**：
   - 枚举值类：`Original Value（中文翻译）`
@@ -299,6 +326,7 @@ parameters:
   - 数值/布尔类：保留原文
   - 数组类（BP）：每条分行显示
 - **嵌套字段**：展平为 `parent.child` 格式，如 `sales_rank.main`（主类目 BSR 排名）
+- **数据来源标记**：后台API / 前台验证 / —（未确认）
 - **输出文件**：`{ASIN}_字段解析.xlsx`，保存到用户桌面
 
 ### 映射表维护
@@ -316,7 +344,14 @@ parameters:
 
    **Step A — web_reader 抓取（首选）：**
    - 使用 `mcp__web_reader__webReader` 抓取前台页面
-   - 提取 BP 数量和内容、A+ 模块标识、前台标题、变体列表
+   - **结构化提取（v1.7.0 强制规则）：** 必须按以下清单逐项搜索返回内容，不得遗漏：
+     1. **Bullet Points** — 搜索 "About this item" 或 feature 列表
+     2. **Product Information 表格** — 搜索 "Product Information" 或 "Technical Specifications"，逐行提取所有 key-value 对（Material、Dimensions、Weight、Model Number、Color、Style、Voltage、Wattage、Power Source、Water Resistance、Installation Method、Included Components、Warranty 等）
+     3. **A+ 模块** — 搜索 "Product description" 结构化区域和 "From the brand" 模块
+     4. **Safety Information** — 搜索安全警告/合规信息
+     5. **视频数量** — 统计页面中视频条目
+     6. **Recommended Uses / Embellishment Features** — 搜索推荐用途和装饰特性
+   - **交叉验证（v1.7.0 强制规则）：** 后台 API 未返回的 Band A/B 属性（如 Material、Dimensions、Model Number、Warranty 等），必须在前台抓取结果中主动搜索后再标记状态，不得直接标 "⚠️ 未确认"
    - 若成功，以前台数据为准进行评分
 
    **Step B — agent-browser 兜底（v1.6.0 新增）：**
@@ -500,6 +535,22 @@ agent-browser（真实 Chrome，CLI 工具）
 7. **GPSR 合规评估已排除（v1.1.0）** — 暂不评估欧盟 GPSR (General Product Safety Regulation) 合规性。安全信息、制造商信息、EU 负责人信息的完整性仅作为数据完整性问题评估，不影响合规评分。如需恢复此评估，请切换回 v1.0.0
 
 ## 版本修改记录
+
+### v1.7.0 (2026-05-25)
+**新增：**
+- 前台结构化提取强制规则（v1.7.0 强制规则）：web_reader 抓取后必须按 6 项清单逐项提取 Product Information 表格、Bullet Points、A+ 模块、Safety Information、视频数量、Recommended Uses 等内容
+- 前台-后台交叉验证规则：后台 API 未返回的 Band A/B 属性必须在前台抓取结果中主动搜索后再标记状态，不得直接标 "⚠️ 未确认"
+- 通用 Excel 模板脚本 `reference/excel-template.py`：可复用的 JSON→Excel 字段解析生成器，支持后台数据自动提取 + 前台验证数据传入 + 缺失字段标记，三段式输出
+
+**变更：**
+- JSON→Excel 字段解析功能升级：从两列（字段|值）改为三列（字段|值|数据来源），新增第三列标记数据来源
+- 诊断工作流 Step A 更新：从简单"提取 BP 和 A+ 模块"改为 6 项结构化提取清单
+- Excel 输出增加"数据来源"列和三段式分区（后台 API / 前台验证 / 缺失未确认）
+
+**背景：**
+- B0GSFCFRPM 诊断案例中发现 web_reader 成功返回了完整的前台 Product Information 区域（含 Material、Dimensions、Model Number、Warranty 等 25+ 属性），但未被系统性提取，导致 9+ 属性被错误标记为 "⚠️ 未确认"，CDQ 总分被低估 12 分（72 vs 84/120）
+- Excel 字段解析脚本此前为一次性脚本硬编码在临时文件中，现固化为通用模板便于复用
+- 用户明确要求"前台 Product Information 的内容必须展开查看"
 
 ### v1.6.0 (2026-05-22)
 **新增：**
